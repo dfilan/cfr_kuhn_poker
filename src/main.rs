@@ -1,18 +1,57 @@
 // Code to solve Rock Paper Scissors using Counterfactual Regret Minimization
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
+use rand::Rng;
 use std::collections::HashMap;
 
 fn main() {
-    println!("Hi");
+    let num_iters = 1_000;
+    let mut rng = rand::thread_rng();
+    let mut deck: [Card; NUM_CARDS] = [Card::Ace, Card::King, Card::Queen];
+
+    let mut util = 0.0;
+    let mut node_map: HashMap<InfoSet, NodeInfo> = HashMap::new();
+
+    for _ in 0..num_iters {
+        shuffle_deck(&mut deck, &mut rng);
+        util += cfr(&deck, &mut node_map, new_history(), 1.0, 1.0);
+    }
+
+    // for debugging purposes
+    let base_set = InfoSet {
+        player: Player::Player0,
+        card: Card::Ace,
+        history: new_history(),
+    };
+    node_map.insert(
+        base_set,
+        NodeInfo {
+            regret_sum: HashMap::new(),
+            strategy: HashMap::new(),
+            strategy_sum: HashMap::new(),
+        },
+    );
+
+    println!("Average game value is {}", util / (num_iters as f64));
+    for info_set in node_map.keys() {
+        let avg_strategy = node_map
+            .get(&info_set)
+            .expect("We should be indexing by keys that actually exist")
+            .get_average_strategy();
+        println!(
+            "At info_set {:?}, avg strategy is {:?}",
+            info_set, avg_strategy
+        );
+    }
 }
 
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 enum Card {
     Queen,
     King,
     Ace,
 }
+const NUM_CARDS: usize = 3;
 
 #[cfg(test)]
 mod card_tests {
@@ -39,21 +78,21 @@ enum Move {
 }
 const MOVE_LIST: [Move; 2] = [Move::Pass, Move::Bet];
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 enum Player {
+    Player0,
     Player1,
-    Player2,
 }
-const PLAYER_LIST: [Player; 2] = [Player::Player1, Player::Player2];
+const PLAYER_LIST: [Player; 2] = [Player::Player0, Player::Player1];
 
 fn other_player(p: Player) -> Player {
     match p {
-        Player::Player1 => Player::Player2,
-        Player::Player2 => Player::Player1,
+        Player::Player0 => Player::Player1,
+        Player::Player1 => Player::Player0,
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 struct History {
     player_to_move: Player,
     moves: Vec<Move>,
@@ -61,7 +100,7 @@ struct History {
 
 fn new_history() -> History {
     History {
-        player_to_move: Player::Player1,
+        player_to_move: Player::Player0,
         moves: Vec::new(),
     }
 }
@@ -84,11 +123,11 @@ mod history_tests {
     #[test]
     fn player_append_valid() {
         let mut my_hist = new_history();
-        my_hist.append(Player::Player1, Move::Pass);
+        my_hist.append(Player::Player0, Move::Pass);
         assert_eq!(
             my_hist,
             History {
-                player_to_move: Player::Player2,
+                player_to_move: Player::Player1,
                 moves: vec![Move::Pass]
             }
         );
@@ -98,10 +137,11 @@ mod history_tests {
     #[should_panic]
     fn player_append_invalid() {
         let mut my_hist = new_history();
-        my_hist.append(Player::Player2, Move::Bet);
+        my_hist.append(Player::Player1, Move::Bet);
     }
 }
 
+#[derive(Debug, Eq, Hash, PartialEq)]
 struct InfoSet {
     player: Player,
     card: Card,
@@ -110,7 +150,6 @@ struct InfoSet {
 // TODO: make sure we can't make invalid info sets? Hopefully?
 
 struct NodeInfo {
-    info_set: InfoSet,
     regret_sum: HashMap<Move, f64>,
     strategy: HashMap<Move, f64>,
     strategy_sum: HashMap<Move, f64>,
@@ -162,6 +201,26 @@ impl NodeInfo {
         }
         avg_strategy
     }
+}
+
+fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
+    for i in (1..NUM_CARDS).rev() {
+        let j = rng.gen_range(0..(i + 1));
+        let tmp = deck[j];
+        deck[j] = deck[i];
+        deck[i] = tmp;
+    }
+}
+
+fn cfr(
+    deck: &[Card; NUM_CARDS],
+    node_map: &mut HashMap<InfoSet, NodeInfo>,
+    hist: History,
+    prob_0: f64,
+    prob_1: f64,
+) -> f64 {
+    // TODO: actually complete
+    return 0.0;
 }
 
 // how do I generate info sets?
