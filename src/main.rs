@@ -206,9 +206,8 @@ impl NodeInfo {
                 1.0 / (MOVE_LIST.len() as f64)
             };
             self.strategy.insert(m, strat_m);
-            let s_sum = self.strategy_sum.get(&m).unwrap_or_else(|| &0.0);
-            self.strategy_sum
-                .insert(m, s_sum + realization_weight * strat_m);
+            let sum_update = realization_weight * strat_m;
+            self.strategy_sum.entry(m).and_modify(|s| {*s += sum_update}).or_insert(sum_update);
         }
 
         &self.strategy
