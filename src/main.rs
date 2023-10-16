@@ -14,23 +14,15 @@ fn main() {
 
     for _ in 0..num_iters {
         shuffle_deck(&mut deck, &mut rng);
-        util += cfr(&deck, &mut node_map, new_history(), 1.0, 1.0);
+        util += cfr_recursive(&deck, &mut node_map, History::new(), 1.0, 1.0);
     }
 
     // for debugging purposes
     let base_set = InfoSet {
-        player: Player::Player0,
         card: Card::Ace,
-        history: new_history(),
+        history: History::new(),
     };
-    node_map.insert(
-        base_set,
-        NodeInfo {
-            regret_sum: HashMap::new(),
-            strategy: HashMap::new(),
-            strategy_sum: HashMap::new(),
-        },
-    );
+    node_map.insert(base_set, NodeInfo::new());
 
     println!("Average game value is {}", util / (num_iters as f64));
     for info_set in node_map.keys() {
@@ -92,17 +84,27 @@ fn other_player(p: Player) -> Player {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+fn get_player_card(p: Player, deck: &[Card; NUM_CARDS]) -> Card {
+    match p {
+        Player::Player0 => deck[0],
+        Player::Player1 => deck[1],
+    }
+}
+
+fn winning_player(deck: &[Card; NUM_CARDS]) -> Player {
+    let card0 = get_player_card(Player::Player0, deck);
+    let card1 = get_player_card(Player::Player1, deck);
+    if card0 > card1 {
+        Player::Player0
+    } else {
+        Player::Player1
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 struct History {
     player_to_move: Player,
     moves: Vec<Move>,
-}
-
-fn new_history() -> History {
-    History {
-        player_to_move: Player::Player0,
-        moves: Vec::new(),
-    }
 }
 
 impl History {
@@ -114,15 +116,36 @@ impl History {
             self.moves.push(m);
         }
     }
+
+    fn retract(&mut self) {
+        let p = self.player_to_move;
+        self.player_to_move = other_player(p);
+        self.moves.pop();
+    }
+
+    fn new() -> History {
+        History {
+            player_to_move: Player::Player0,
+            moves: Vec::new(),
+        }
+    }
+
+    fn get_info_set(&self, deck: &[Card; NUM_CARDS]) -> InfoSet {
+        let card = get_player_card(self.player_to_move, deck);
+        InfoSet {
+            card: card,
+            history: self.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod history_tests {
-    use crate::{new_history, History, Move, Player};
+    use crate::{History, Move, Player};
 
     #[test]
     fn player_append_valid() {
-        let mut my_hist = new_history();
+        let mut my_hist = History::new();
         my_hist.append(Player::Player0, Move::Pass);
         assert_eq!(
             my_hist,
@@ -136,18 +159,16 @@ mod history_tests {
     #[test]
     #[should_panic]
     fn player_append_invalid() {
-        let mut my_hist = new_history();
+        let mut my_hist = History::new();
         my_hist.append(Player::Player1, Move::Bet);
     }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct InfoSet {
-    player: Player,
     card: Card,
     history: History,
 }
-// TODO: make sure we can't make invalid info sets? Hopefully?
 
 struct NodeInfo {
     regret_sum: HashMap<Move, f64>,
@@ -201,6 +222,14 @@ impl NodeInfo {
         }
         avg_strategy
     }
+
+    fn new() -> NodeInfo {
+        NodeInfo {
+            regret_sum: HashMap::new(),
+            strategy: HashMap::new(),
+            strategy_sum: HashMap::new(),
+        }
+    }
 }
 
 fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
@@ -212,15 +241,63 @@ fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
     }
 }
 
-fn cfr(
+fn cfr_recursive(
     deck: &[Card; NUM_CARDS],
     node_map: &mut HashMap<InfoSet, NodeInfo>,
-    hist: History,
+    mut hist: History,
     prob_0: f64,
     prob_1: f64,
 ) -> f64 {
     // TODO: actually complete
-    return 0.0;
+    // TODO: re-write it in DFS style to not be recursive
+    // return payoff for terminal states
+    if hist.moves.len() > 1 {
+        let terminal_pass = hist.moves[hist.moves.len() - 1] == Move::Pass;
+        let double_bet = hist.moves[hist.moves.len() - 1] == Move::Bet
+            && hist.moves[hist.moves.len() - 2] == Move::Bet;
+        let current_player_winning = winning_player(deck) == hist.player_to_move;
+        if terminal_pass {
+            if hist.moves.len() == 0 && hist.moves[0] == Move::Pass {
+                return if current_player_winning { 1.0 } else { -1.0 };
+            } else {
+                return 1.0;
+            }
+        } else if double_bet {
+            return if current_player_winning { 2.0 } else { -2.0 };
+        }
+    }
+    
+    let info_set = hist.get_info_set(deck);
+    let mut empty_node_info = NodeInfo::new();
+    let option_node_info = node_map.get_mut(&info_set);
+    let (reinsert_node_info, node_info) = match option_node_info {
+        None => (true, &mut empty_node_info),
+        Some(x) => (false, x),
+    };
+    for m in MOVE_LIST {
+        let current_player = hist.player_to_move;
+        hist.append(other_player(current_player), m);
+        // call cfr with additional history and probability
+    }
+    for m in MOVE_LIST {
+        // compute and accumulate counterfactual regret
+    }
+    // make sure I put shit back in node_map
+    // because if nothing was in there before, still nothing's in there
+    if reinsert_node_info {
+        node_map.insert(info_set, *node_info);
+    }
+    hist.retract();
+    0.0
+}
+
+fn is_terminal(hist: &History) -> bool {
+    // terminal if history is two passes, or if >1 action and last player passed, or if last two moves are bets
+    true
+}
+
+fn utility(hist: &History) -> f64 {
+    0.0
 }
 
 // how do I generate info sets?
