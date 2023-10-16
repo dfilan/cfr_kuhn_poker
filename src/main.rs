@@ -269,11 +269,7 @@ fn cfr_recursive(
 
     let info_set = hist.get_info_set(deck);
     let mut empty_node_info = NodeInfo::new();
-    // let option_node_info = node_map.get_mut(&info_set);
-    // let (reinsert_node_info, node_info) = match option_node_info {
-    //     None => (true, &mut empty_node_info),
-    //     Some(x) => (false, x),
-    // };
+    let node_info = node_map.entry(info_set).or_insert(empty_node_info);
     for m in MOVE_LIST {
         let current_player = hist.player_to_move;
         hist.append(other_player(current_player), m);
@@ -282,11 +278,6 @@ fn cfr_recursive(
     for m in MOVE_LIST {
         // compute and accumulate counterfactual regret
     }
-    // make sure I put shit back in node_map
-    // because if nothing was in there before, still nothing's in there
-    // if reinsert_node_info {
-    //     node_map.insert(info_set, *node_info);
-    // }
     hist.retract();
     0.0
 }
