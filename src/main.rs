@@ -286,6 +286,7 @@ fn cfr_recursive(
             Player::Player0 => cfr_recursive(deck, node_map, hist, prob_0 * strat_m, prob_1),
             Player::Player1 => cfr_recursive(deck, node_map, hist, prob_0, prob_1 * strat_m),
         };
+        hist.retract();
         // let util_m = 0.0;
         node_util += strat_m * util_m;
         utils.insert(m, util_m);
@@ -302,8 +303,6 @@ fn cfr_recursive(
         };
         node_info.regret_sum.entry(m).and_modify(|r| {*r += counterfact_prob * regret_m});
     }
-    hist.retract();
-    0.0
 }
 
 fn util_if_terminal(hist: &History, deck: &[Card; NUM_CARDS]) -> Option<f64> {
