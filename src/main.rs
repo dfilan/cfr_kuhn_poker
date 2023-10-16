@@ -1,6 +1,10 @@
 // Code to solve Rock Paper Scissors using Counterfactual Regret Minimization
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
+// TODO: make CFR iterative rather than recursive
+// TODO: in NodeInfo, replace HashMaps with exhaustive structs with a util per move,
+// like in rps code? (rough if there's tons of moves...)
+
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -13,8 +17,9 @@ fn main() {
     let mut node_map: HashMap<InfoSet, NodeInfo> = HashMap::new();
 
     for _ in 0..num_iters {
+        let mut hist = History::new();
         shuffle_deck(&mut deck, &mut rng);
-        util += cfr_recursive(&deck, &mut node_map, History::new(), 1.0, 1.0);
+        util += cfr_recursive(&deck, &mut node_map, &mut hist, 1.0, 1.0);
     }
 
     // for debugging purposes
@@ -244,13 +249,52 @@ fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
 fn cfr_recursive(
     deck: &[Card; NUM_CARDS],
     node_map: &mut HashMap<InfoSet, NodeInfo>,
-    mut hist: History,
+    hist: &mut History,
     prob_0: f64,
     prob_1: f64,
 ) -> f64 {
     // TODO: actually complete
     // TODO: re-write it in DFS style to not be recursive
     // return payoff for terminal states
+
+    match util_if_terminal(hist, deck) {
+        Some(x) => {
+            return x;
+        },
+        None => (),
+    }
+
+    let info_set = hist.get_info_set(deck);
+    let mut empty_node_info = NodeInfo::new();
+    let node_info = node_map.entry(info_set).or_insert(empty_node_info);
+    let current_player = hist.player_to_move;
+    let opponent = other_player(current_player);
+    let strategy = node_info.get_strategy(match current_player {
+        Player::Player0 => prob_0,
+        Player::Player1 => prob_1,
+    });
+    let mut utils: HashMap<Move, f64> = HashMap::new();
+    let mut node_util = 0.0;
+    for m in MOVE_LIST {
+        hist.append(opponent, m);
+        let strat_m = strategy.get(&m).expect("Strategies should be exhaustive");
+        // call cfr with additional history and probability
+        let util_m = (-1.0) * match current_player {
+            Player::Player0 => cfr_recursive(deck, node_map, hist, prob_0 * strat_m, prob_1),
+            Player::Player1 => cfr_recursive(deck, node_map, hist, prob_0, prob_1 * strat_m),
+        };
+        // let util_m = 0.0;
+        node_util += strat_m * util_m;
+        utils.insert(m, util_m);
+    }
+    for m in MOVE_LIST {
+        // compute and accumulate counterfactual regret
+    }
+    hist.retract();
+    0.0
+}
+
+fn util_if_terminal(hist: &History, deck: &[Card; NUM_CARDS]) -> Option<f64> {
     if hist.moves.len() > 1 {
         let terminal_pass = hist.moves[hist.moves.len() - 1] == Move::Pass;
         let double_bet = hist.moves[hist.moves.len() - 1] == Move::Bet
@@ -258,28 +302,15 @@ fn cfr_recursive(
         let current_player_winning = winning_player(deck) == hist.player_to_move;
         if terminal_pass {
             if hist.moves.len() == 0 && hist.moves[0] == Move::Pass {
-                return if current_player_winning { 1.0 } else { -1.0 };
+                return Some(if current_player_winning { 1.0 } else { -1.0 });
             } else {
-                return 1.0;
+                return Some(1.0);
             }
         } else if double_bet {
-            return if current_player_winning { 2.0 } else { -2.0 };
+            return Some(if current_player_winning { 2.0 } else { -2.0 });
         }
     }
-
-    let info_set = hist.get_info_set(deck);
-    let mut empty_node_info = NodeInfo::new();
-    let node_info = node_map.entry(info_set).or_insert(empty_node_info);
-    for m in MOVE_LIST {
-        let current_player = hist.player_to_move;
-        hist.append(other_player(current_player), m);
-        // call cfr with additional history and probability
-    }
-    for m in MOVE_LIST {
-        // compute and accumulate counterfactual regret
-    }
-    hist.retract();
-    0.0
+    None
 }
 
 // how do I generate info sets?
