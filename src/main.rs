@@ -254,10 +254,9 @@ fn cfr_recursive(
     prob_0: f64,
     prob_1: f64,
 ) -> f64 {
-    // TODO: actually complete
     // TODO: re-write it in DFS style to not be recursive
-    // return payoff for terminal states
 
+    // return utility of terminal nodes
     match util_if_terminal(hist, deck) {
         Some(x) => {
             return x;
@@ -265,6 +264,7 @@ fn cfr_recursive(
         None => (),
     }
 
+    // get relevant variables
     let info_set = hist.get_info_set(deck);
     let mut empty_node_info = NodeInfo::new();
     let node_info = node_map.entry(info_set).or_insert(empty_node_info);
@@ -276,6 +276,8 @@ fn cfr_recursive(
     });
     let mut utils: HashMap<Move, f64> = HashMap::new();
     let mut node_util = 0.0;
+
+    // with each action, recursively call CFR with additional history and probability
     for m in MOVE_LIST {
         hist.append(opponent, m);
         let strat_m = strategy.get(&m).expect("Strategies should be exhaustive");
@@ -288,6 +290,7 @@ fn cfr_recursive(
         node_util += strat_m * util_m;
         utils.insert(m, util_m);
     }
+    // for each action, compute and accumulate counterfactual regret
     for m in MOVE_LIST {
         let util_m = utils
             .get(&m)
