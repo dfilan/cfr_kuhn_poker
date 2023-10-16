@@ -4,6 +4,7 @@
 // TODO: make CFR iterative rather than recursive
 // TODO: in NodeInfo, replace HashMaps with exhaustive structs with a util per move,
 // like in rps code? (rough if there's tons of moves...)
+// or just do an array using the discriminant
 
 use rand::Rng;
 use std::collections::HashMap;
