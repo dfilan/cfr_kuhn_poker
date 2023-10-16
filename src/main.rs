@@ -310,6 +310,8 @@ fn cfr_recursive(
         };
         node_info.regret_sum.entry(m).and_modify(|r| {*r += counterfact_prob * regret_m});
     }
+
+    node_util
 }
 
 // How to write the above code iterative-style:
