@@ -255,10 +255,12 @@ fn cfr_recursive(
     prob_1: f64,
 ) -> f64 {
     // TODO: re-write it in DFS style to not be recursive
+    // TODO: write check that the length of hist is the same at the start and end of this function body
 
     // return utility of terminal nodes
     match util_if_terminal(hist, deck) {
         Some(x) => {
+            hist.retract();
             return x;
         },
         None => (),
@@ -291,6 +293,7 @@ fn cfr_recursive(
         node_util += strat_m * util_m;
         utils.insert(m, util_m);
     }
+
     // for each action, compute and accumulate counterfactual regret
     for m in MOVE_LIST {
         let util_m = utils
