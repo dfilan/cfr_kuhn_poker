@@ -5,6 +5,9 @@
 // TODO: in NodeInfo, replace HashMaps with exhaustive structs with a util per move,
 // like in rps code? (rough if there's tons of moves...)
 // or just do an array using the discriminant
+// ^ actually I think I shouldn't do that - at some point I'll have variable-sized bets.
+// TODO: break out card, move, player, history etc types into their own file
+// TODO document some stuff
 
 use rand::Rng;
 use std::collections::HashMap;
@@ -184,6 +187,7 @@ struct NodeInfo {
 
 impl NodeInfo {
     fn get_strategy(&mut self, realization_weight: f64) -> &HashMap<Move, f64> {
+        // compute strategies by regret matching
         let mut normalizing_sum = 0.0;
         for m in MOVE_LIST {
             let r = self.regret_sum.get(&m).unwrap_or_else(|| &0.0);
