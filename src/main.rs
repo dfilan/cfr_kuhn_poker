@@ -305,6 +305,14 @@ fn cfr_recursive(
     }
 }
 
+// How to write the above code iterative-style:
+// - represent nodes to visit as a vector. store them as "this many moves in, take this
+//   action". then you don't have to store a ton of hist vectors.
+//   - so instead of a "retract" method you have a "lop off at move n" method.
+// - at each node, store the p0 and p1.
+// - once you hit a terminal node, have a function that moves the utility backwards and
+//   updates all the node utilities
+
 fn util_if_terminal(hist: &History, deck: &[Card; NUM_CARDS]) -> Option<f64> {
     if hist.moves.len() > 1 {
         let terminal_pass = hist.moves[hist.moves.len() - 1] == Move::Pass;
