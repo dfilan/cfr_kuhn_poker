@@ -289,7 +289,15 @@ fn cfr_recursive(
         utils.insert(m, util_m);
     }
     for m in MOVE_LIST {
-        // compute and accumulate counterfactual regret
+        let util_m = utils
+            .get(&m)
+            .expect("We should have inserted a utility for m in the previous for loop");
+        let regret_m = util_m - node_util;
+        let counterfact_prob = match current_player {
+            Player::Player0 => prob_1,
+            Player::Player1 => prob_0,
+        };
+        node_info.regret_sum.entry(m).and_modify(|r| {*r += counterfact_prob * regret_m});
     }
     hist.retract();
     0.0
