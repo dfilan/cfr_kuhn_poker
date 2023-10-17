@@ -23,9 +23,8 @@ fn main() {
     let mut node_map: HashMap<InfoSet, NodeInfo> = HashMap::new();
 
     for _ in 0..num_iters {
-        let mut hist = History::new();
         shuffle_deck(&mut deck, &mut rng);
-        util += cfr_recursive(&deck, &mut node_map, &mut hist, 1.0, 1.0);
+        util += cfr(&deck, &mut node_map);
     }
 
     // for debugging purposes
@@ -54,68 +53,118 @@ fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
     }
 }
 
-fn cfr_recursive(
+fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> Floating {
+    let start_node = ChancyHistory::new();
+    let mut node_stack: Vec<ChancyHistory> = vec![start_node];
+
+    // search the game tree depth-first until finding terminal nodes
+    // then go back up the tree updating the utilities of each node and action
+    while !node_stack.is_empty() {
+        let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
+        let info_set = chancy_hist.to_info_set(deck);
+        let option_util = util_if_terminal(&info_set, deck);
+        match option_util {
+            None => (),
+            Some(u) => {
+                // update the counterfactual value of this history and everything before
+                // basically I'm going to store each node's overall utility and utility of
+                // each action
+                update_utils(&chancy_hist, deck, node_map, u);
+            }
+        }
+    }
+
+    // search the game tree again to calculate counterfactual regrets, now that utilities are
+    // calculated
+    let start_node = ChancyHistory::new();
+    node_stack.push(start_node);
+    while !node_stack.is_empty() {
+        // get a node
+        let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
+        let info_set = chancy_hist.to_info_set(deck);
+
+        // calculate the regret of each action
+
+        // push those to update the cumulative counterfactual regret
+        // (by multiplying the regrets with the counterfactual arrival probabilities)
+        // (while doing that, secretly also update the strategies and strategy sums)
+    }
+
+    // return the utility of the start node
+    return 0.0;
+}
+
+fn update_utils(
+    chancy_hist: &ChancyHistory,
     deck: &[Card; NUM_CARDS],
     node_map: &mut HashMap<InfoSet, NodeInfo>,
-    hist: &mut History,
-    prob_0: f64,
-    prob_1: f64,
-) -> f64 {
-    // TODO: re-write it in DFS style to not be recursive
-    // TODO: write check that the length of hist is the same at the start and end of this function body
-
-    // return utility of terminal nodes
-    match util_if_terminal(hist, deck) {
-        Some(x) => {
-            hist.retract();
-            return x;
-        },
-        None => (),
-    }
-
-    // get relevant variables
-    let info_set = hist.get_info_set(deck);
-    let mut empty_node_info = NodeInfo::new();
-    let node_info = node_map.entry(info_set).or_insert(empty_node_info);
-    let current_player = hist.player_to_move;
-    let opponent = other_player(current_player);
-    let strategy = node_info.get_strategy(match current_player {
-        Player::Player0 => prob_0,
-        Player::Player1 => prob_1,
-    });
-    let mut utils: HashMap<Move, f64> = HashMap::new();
-    let mut node_util = 0.0;
-
-    // with each action, recursively call CFR with additional history and probability
-    for m in MOVE_LIST {
-        hist.append(opponent, m);
-        let strat_m = strategy.get(&m).expect("Strategies should be exhaustive");
-        // call cfr with additional history and probability
-        let util_m = (-1.0) * match current_player {
-            Player::Player0 => cfr_recursive(deck, node_map, hist, prob_0 * strat_m, prob_1),
-            Player::Player1 => cfr_recursive(deck, node_map, hist, prob_0, prob_1 * strat_m),
-        };
-        hist.retract();
-        // let util_m = 0.0;
-        node_util += strat_m * util_m;
-        utils.insert(m, util_m);
-    }
-
-    // for each action, compute and accumulate counterfactual regret
-    for m in MOVE_LIST {
-        let util_m = utils
-            .get(&m)
-            .expect("We should have inserted a utility for m in the previous for loop");
-        let regret_m = util_m - node_util;
-        let counterfact_prob = match current_player {
-            Player::Player0 => prob_1,
-            Player::Player1 => prob_0,
-        };
-        node_info.regret_sum.entry(m).and_modify(|r| {*r += counterfact_prob * regret_m});
-    }
-
-    node_util
+    u: Floating,
+) {
+    ()
 }
+
+// fn cfr_recursive(
+//     deck: &[Card; NUM_CARDS],
+//     node_map: &mut HashMap<InfoSet, NodeInfo>,
+//     hist: &mut History,
+//     prob_0: Floating,
+//     prob_1: Floating,
+// ) -> Floating {
+//     // TODO: re-write it in DFS style to not be recursive
+//     // TODO: write check that the length of hist is the same at the start and end of this function body
+
+//     // return utility of terminal nodes
+//     match util_if_terminal(hist, deck) {
+//         Some(x) => {
+//             hist.retract();
+//             return x;
+//         },
+//         None => (),
+//     }
+
+//     // get relevant variables
+//     let info_set = hist.get_info_set(deck);
+//     let mut empty_node_info = NodeInfo::new();
+//     let node_info = node_map.entry(info_set).or_insert(empty_node_info);
+//     let current_player = hist.player_to_move;
+//     let opponent = other_player(current_player);
+//     let strategy = node_info.get_strategy(match current_player {
+//         Player::Player0 => prob_0,
+//         Player::Player1 => prob_1,
+//     });
+//     let mut utils: HashMap<Move, Floating> = HashMap::new();
+//     let mut node_util = 0.0;
+
+//     // with each action, recursively call CFR with additional history and probability
+//     for m in MOVE_LIST {
+//         hist.append(opponent, m);
+//         let strat_m = strategy.get(&m).expect("Strategies should be exhaustive");
+//         // call cfr with additional history and probability
+//         // let util_m = (-1.0) * match current_player {
+//         //     Player::Player0 => cfr_recursive(deck, node_map, hist, prob_0 * strat_m, prob_1),
+//         //     Player::Player1 => cfr_recursive(deck, node_map, hist, prob_0, prob_1 * strat_m),
+//         // };
+//         hist.retract();
+//         let util_m = 0.0;
+//         node_util += strat_m * util_m;
+//         utils.insert(m, util_m);
+//     }
+
+//     // for each action, compute and accumulate counterfactual regret
+//     for m in MOVE_LIST {
+//         let util_m = utils
+//             .get(&m)
+//             .expect("We should have inserted a utility for m in the previous for loop");
+//         let regret_m = util_m - node_util;
+//         let counterfact_prob = match current_player {
+//             Player::Player0 => prob_1,
+//             Player::Player1 => prob_0,
+//         };
+//         node_info.regret_sum.entry(m).and_modify(|r| {*r += counterfact_prob * regret_m});
+//     }
+
+//     node_util
+// }
 
 // How to write the above code iterative-style:
 // - represent nodes to visit as a vector. store them as "this many moves in, take this
