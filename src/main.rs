@@ -86,22 +86,23 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
         let chancy_hist = node_stack
             .pop()
             .expect("Node stack should be non-empty at the start of this loop");
-        let info_set = chancy_hist.to_info_set(deck);
-        let node_info = node_map
-            .get(&info_set)
-            .expect("Info entries were added to all nodes in the last traversal");
 
         if chancy_hist.util_if_terminal(deck) == None {
             // node isn't terminal
+            let info_set = chancy_hist.to_info_set(deck);
+            let node_info = node_map
+                .get(&info_set)
+                .expect("Info entries were added to all nodes in the last traversal");
+
             // append children to stack before we start updating move probabilities
             append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
+
+            // calculate the regret of each action
+
+            // push those to update the cumulative counterfactual regret
+            // (by multiplying the regrets with the counterfactual arrival probabilities)
+            // (while doing that, secretly also update the strategies and strategy sums)
         }
-
-        // calculate the regret of each action
-
-        // push those to update the cumulative counterfactual regret
-        // (by multiplying the regrets with the counterfactual arrival probabilities)
-        // (while doing that, secretly also update the strategies and strategy sums)
     }
 
     // return the utility of the start node
@@ -143,13 +144,6 @@ fn update_utils(
         let node_info = node_map.get(&info_set).expect(
             "We should have reached non-terminal nodes earlier in DFS and made node infos for them."
         );
-        // getting them in this order because I want to rarely clone info_set,
-        // and node_info should actually always be full of entries
-        // because we create it if needed when handling non-terminal nodes
-        // let node_info = node_map.get(&info_set) {
-        //     None => node_map.entry(info_set.clone()).or_insert(NodeInfo::new()),
-        //     Some(n_info) => n_info,
-        // };
         let node_utils = utils_map.entry(info_set).or_insert(NodeUtils::new());
         // add the discounted utility to the node value
         node_utils
