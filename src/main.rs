@@ -70,16 +70,10 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
             }
             None => {
                 // our node is not terminal
-                // wrap this up in a function?
                 // so add child nodes to the node stack
                 let info_set = chancy_hist.to_info_set(deck);
                 let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
-                for m in MOVE_LIST {
-                    // get prob of taking m from this info set
-                    let prob_move = node_info.get_strategy(m);
-                    let next_chancy_hist = chancy_hist.extend(m, prob_move);
-                    node_stack.push(next_chancy_hist);
-                }
+                append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
             }
         }
     }
@@ -93,12 +87,12 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
             .pop()
             .expect("Node stack should be non-empty at the start of this loop");
         let info_set = chancy_hist.to_info_set(deck);
+        let node_info = node_map
+            .get(&info_set)
+            .expect("Info entries were added to all nodes in the last traversal");
 
-        for m in MOVE_LIST {
-            // push successor node onto stack
-            // gotta get prob of taking m from that info set
-            // ah, here's your problem: got to do this before updating the strategies at this node
-        }
+        // append children to stack before we start updating move probabilities
+        append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
 
         // calculate the regret of each action
 
@@ -113,6 +107,19 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
         .get(&start_node.to_info_set(deck))
         .expect("We should have calculated info for this node in the main loop")
         .value
+}
+
+fn append_children_to_stack(
+    chancy_hist: &ChancyHistory,
+    node_info: &NodeInfo,
+    node_stack: &mut Vec<ChancyHistory>,
+) {
+    for m in MOVE_LIST {
+        // get prob of taking m from this info set
+        let prob_move = node_info.get_strategy(m);
+        let next_chancy_hist = chancy_hist.extend(m, prob_move);
+        node_stack.push(next_chancy_hist);
+    }
 }
 
 fn update_utils(
