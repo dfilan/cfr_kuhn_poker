@@ -1,15 +1,13 @@
 // Code to solve Rock Paper Scissors using Counterfactual Regret Minimization
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
-// TODO: make CFR iterative rather than recursive
-// TODO: break out card, move, player, history etc types into their own file
 // TODO document some stuff
 
 use rand::Rng;
 use std::collections::HashMap;
 
 use crate::game::{Card, MOVE_LIST, NUM_CARDS};
-use crate::solver_tree::{ChancyHistory, Floating, InfoSet, NodeInfo};
+use crate::solver_tree::{ChancyHistory, Floating, InfoSet, NodeInfo, NodeUtils};
 
 mod game;
 mod solver_tree;
@@ -54,34 +52,41 @@ fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
 }
 
 fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> Floating {
-    let start_node = ChancyHistory::new();
-    let mut node_stack: Vec<ChancyHistory> = vec![start_node];
+    let mut node_stack: Vec<ChancyHistory> = vec![ChancyHistory::new()];
+    let mut utils_map: HashMap<InfoSet, NodeUtils> = HashMap::new();
 
     // search the game tree depth-first until finding terminal nodes
     // then go back up the tree updating the utilities of each node and action
     while !node_stack.is_empty() {
-        let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
+        let chancy_hist = node_stack
+            .pop()
+            .expect("Node stack should be non-empty at the start of this loop");
         let option_util = chancy_hist.util_if_terminal(deck);
         match option_util {
             None => (),
-            Some(u) => {
+            Some(utility) => {
+                // our node is terminal
                 // update each node's value and utility of each action
-                update_utils(&chancy_hist, deck, node_map, u);
+                update_utils(&chancy_hist, deck, node_map, &mut utils_map, utility);
             }
         }
         for m in MOVE_LIST {
-            // push successor node onto stack
             // gotta get prob of taking m from that info set
+            // multiply that by existing counterfactual probs as appropriate
+            // then stick that plus m onto the end of chancy_hist.
+            // (all the above should probably be a method of ChancyHistory)
+            // then put that onto the stack
         }
     }
 
     // search the game tree again to calculate counterfactual regrets, now that utilities are
     // calculated
-    let start_node = ChancyHistory::new();
-    node_stack.push(start_node);
+    node_stack.push(ChancyHistory::new());
     while !node_stack.is_empty() {
         // get a node
-        let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
+        let chancy_hist = node_stack
+            .pop()
+            .expect("Node stack should be non-empty at the start of this loop");
         let info_set = chancy_hist.to_info_set(deck);
 
         for m in MOVE_LIST {
@@ -98,32 +103,45 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
     }
 
     // return the utility of the start node
-    return 0.0;
+    let start_node = ChancyHistory::new();
+    utils_map
+        .get(&start_node.to_info_set(deck))
+        .expect("We should have calculated info for this node in the main loop")
+        .value
 }
 
 fn update_utils(
     chancy_hist: &ChancyHistory,
     deck: &[Card; NUM_CARDS],
     node_map: &mut HashMap<InfoSet, NodeInfo>,
+    utils_map: &mut HashMap<InfoSet, NodeUtils>,
     terminal_utility: Floating,
 ) {
     let mut player_utility: Floating = terminal_utility;
     let mut reach_prob: Floating = 1.0;
-    // loop over non-terminal nodes, from the end to the start
+    // iterate over non-terminal prefixes of this history, from the end to the start
     for n in (0..chancy_hist.len() - 1).rev() {
         let (info_set, m) = chancy_hist.truncate(n, deck);
-        // we've switched players, so utilty has changed sign
+        // we've switched players, so utility has changed sign
         player_utility *= -1.0;
-        let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
+        // getting node info and node utils
+        // getting them in this order because I want to rarely clone info_set,
+        // and for most iterations node_info will be full of entries but node_utils won't be
+        let node_info = match node_map.get(&info_set) {
+            None => node_map.entry(info_set.clone()).or_insert(NodeInfo::new()),
+            Some(n_info) => n_info,
+        };
+        let node_utils = utils_map.entry(info_set).or_insert(NodeUtils::new());
         // add the discounted utility to the node value
-        node_info
-            .utils
+        node_utils
+            .move_utils
             .entry(m)
             .and_modify(|u| *u += reach_prob * player_utility);
-        // update the node value by the probability we take this action
+        // update the node value by its discounted utility,
+        // updating the discount by the probability we take the action in question
         let prob_next_move = node_info.get_strategy(m);
         reach_prob *= prob_next_move;
-        node_info.value += reach_prob * player_utility;
+        node_utils.value += reach_prob * player_utility;
     }
 }
 

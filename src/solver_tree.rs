@@ -172,35 +172,16 @@ impl ChancyHistory {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub struct InfoSet {
     card: Card,
     history: History,
 }
 
 pub struct NodeInfo {
-    pub value: Floating,
-    pub utils: HashMap<Move, Floating>,
     regret_sum: HashMap<Move, Floating>,
     strategy: HashMap<Move, Floating>,
     strategy_sum: HashMap<Move, Floating>,
-}
-
-fn new_move_to_float_map_zeros() -> HashMap<Move, Floating> {
-    let mut new_map = HashMap::new();
-    for m in MOVE_LIST {
-        new_map.insert(m, 0.0);
-    }
-    new_map
-}
-
-fn new_move_to_float_map_probs() -> HashMap<Move, Floating> {
-    let mut new_map = HashMap::new();
-    let num_moves = MOVE_LIST.len();
-    for m in MOVE_LIST {
-        new_map.insert(m, 1.0 / (num_moves as Floating));
-    }
-    new_map
 }
 
 impl NodeInfo {
@@ -262,11 +243,40 @@ impl NodeInfo {
 
     pub fn new() -> Self {
         Self {
-            value: 0.0,
-            utils: new_move_to_float_map_zeros(),
             regret_sum: new_move_to_float_map_zeros(),
             strategy: new_move_to_float_map_probs(),
             strategy_sum: new_move_to_float_map_zeros(),
+        }
+    }
+}
+
+fn new_move_to_float_map_zeros() -> HashMap<Move, Floating> {
+    let mut new_map = HashMap::new();
+    for m in MOVE_LIST {
+        new_map.insert(m, 0.0);
+    }
+    new_map
+}
+
+fn new_move_to_float_map_probs() -> HashMap<Move, Floating> {
+    let mut new_map = HashMap::new();
+    let num_moves = MOVE_LIST.len();
+    for m in MOVE_LIST {
+        new_map.insert(m, 1.0 / (num_moves as Floating));
+    }
+    new_map
+}
+
+pub struct NodeUtils {
+    pub value: Floating,
+    pub move_utils: HashMap<Move, Floating>,
+}
+
+impl NodeUtils {
+    pub fn new() -> Self {
+        Self {
+            value: 0.0,
+            move_utils: new_move_to_float_map_zeros(),
         }
     }
 }
