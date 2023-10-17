@@ -91,8 +91,11 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
             .get(&info_set)
             .expect("Info entries were added to all nodes in the last traversal");
 
-        // append children to stack before we start updating move probabilities
-        append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
+        if chancy_hist.util_if_terminal(deck) == None {
+            // node isn't terminal
+            // append children to stack before we start updating move probabilities
+            append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
+        }
 
         // calculate the regret of each action
 
