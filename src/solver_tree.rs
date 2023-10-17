@@ -16,6 +16,13 @@ struct History {
 }
 
 impl History {
+    fn new() -> Self {
+        Self {
+            player_to_move: Player::Player0,
+            moves: Vec::new(),
+        }
+    }
+
     fn append(&mut self, p: Player, m: Move) {
         if p != self.player_to_move {
             panic!("Attempted to add to history, but it was the wrong player's turn");
@@ -38,13 +45,6 @@ impl History {
         self.moves.truncate(n);
         if n % 2 != 0 {
             self.player_to_move = other_player(self.player_to_move);
-        }
-    }
-
-    fn new() -> Self {
-        Self {
-            player_to_move: Player::Player0,
-            moves: Vec::new(),
         }
     }
 
@@ -89,6 +89,17 @@ pub struct ChancyHistory {
 }
 
 impl ChancyHistory {
+    pub fn new() -> Self {
+        Self {
+            player_to_move: Player::Player0,
+            moves_and_counterfactual_reach_probs: Vec::new(),
+            // note that on the first move we don't have explicit counterfactual probabilities
+            // of 1.0, sorry.
+            // could probably implement a 'get_latest_p0_p1' method
+            // actually that's going to be useful when adding children
+        }
+    }
+
     pub fn truncate(&self, n: usize, deck: &[Card; NUM_CARDS]) -> (InfoSet, Move) {
         if n >= self.len() {
             panic!("Attempted to truncate a ChancyHistory to a limit no shorter than its length");
@@ -160,16 +171,6 @@ impl ChancyHistory {
         None
     }
 
-    pub fn new() -> Self {
-        Self {
-            player_to_move: Player::Player0,
-            moves_and_counterfactual_reach_probs: Vec::new(),
-            // note that on the first move we don't have explicit counterfactual probabilities
-            // of 1.0, sorry.
-            // could probably implement a 'get_latest_p0_p1' method
-            // actually that's going to be useful when adding children
-        }
-    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
@@ -185,6 +186,14 @@ pub struct NodeInfo {
 }
 
 impl NodeInfo {
+    pub fn new() -> Self {
+        Self {
+            regret_sum: new_move_to_float_map_zeros(),
+            strategy: new_move_to_float_map_probs(),
+            strategy_sum: new_move_to_float_map_zeros(),
+        }
+    }
+
     // TODO: move all this updating to when you accumulate the cumulative regret
     pub fn get_strategy(&self, m: Move) -> Floating {
         *self
@@ -239,14 +248,6 @@ impl NodeInfo {
             );
         }
         avg_strategy
-    }
-
-    pub fn new() -> Self {
-        Self {
-            regret_sum: new_move_to_float_map_zeros(),
-            strategy: new_move_to_float_map_probs(),
-            strategy_sum: new_move_to_float_map_zeros(),
-        }
     }
 }
 
