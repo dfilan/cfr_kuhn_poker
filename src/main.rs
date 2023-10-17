@@ -45,9 +45,7 @@ fn main() {
 fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
     for i in (1..NUM_CARDS).rev() {
         let j = rng.gen_range(0..(i + 1));
-        let tmp = deck[j];
-        deck[j] = deck[i];
-        deck[i] = tmp;
+        deck.swap(i, j);
     }
 }
 
@@ -57,10 +55,7 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
 
     // search the game tree depth-first until finding terminal nodes
     // then go back up the tree updating the utilities of each node and action
-    while !node_stack.is_empty() {
-        let chancy_hist = node_stack
-            .pop()
-            .expect("Node stack should be non-empty at the start of this loop");
+    while let Some(chancy_hist) = node_stack.pop() {
         let option_util = chancy_hist.util_if_terminal(deck);
         match option_util {
             Some(utility) => {
@@ -73,7 +68,7 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
                 // so add child nodes to the node stack
                 let info_set = chancy_hist.to_info_set(deck);
                 let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
-                append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
+                append_children_to_stack(&chancy_hist, node_info, &mut node_stack);
             }
         }
     }
@@ -81,13 +76,8 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
     // search the game tree again to calculate counterfactual regrets, now that utilities are
     // calculated
     node_stack.push(ChancyHistory::new());
-    while !node_stack.is_empty() {
-        // get a node
-        let chancy_hist = node_stack
-            .pop()
-            .expect("Node stack should be non-empty at the start of this loop");
-
-        if chancy_hist.util_if_terminal(deck) == None {
+    while let Some(chancy_hist) = node_stack.pop() {
+        if chancy_hist.util_if_terminal(deck).is_none() {
             // node isn't terminal
             let info_set = chancy_hist.to_info_set(deck);
             let node_info = node_map
@@ -95,7 +85,7 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
                 .expect("Info entries were added to all nodes in the last traversal");
 
             // append children to stack before we start updating move probabilities
-            append_children_to_stack(&chancy_hist, &node_info, &mut node_stack);
+            append_children_to_stack(&chancy_hist, node_info, &mut node_stack);
 
             // calculate the regret of each action
 

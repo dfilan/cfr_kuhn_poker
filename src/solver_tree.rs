@@ -53,7 +53,7 @@ impl History {
     fn get_info_set(&self, deck: &[Card; NUM_CARDS]) -> InfoSet {
         let card = get_player_card(self.player_to_move, deck);
         InfoSet {
-            card: card,
+            card,
             history: self.clone(),
         }
     }
@@ -120,7 +120,7 @@ impl ChancyHistory {
         };
         let card = get_player_card(new_player, deck);
         let info_set = InfoSet {
-            card: card,
+            card,
             history: History {
                 player_to_move: new_player,
                 moves: trunc_moves,
@@ -228,7 +228,7 @@ impl NodeInfo {
     //     // compute strategies by regret matching
     //     let mut normalizing_sum = 0.0;
     //     for m in MOVE_LIST {
-    //         let r = self.regret_sum.get(&m).unwrap_or_else(|| &0.0);
+    //         let r = self.regret_sum.get(&m).unwrap_or(&0.0);
     //         let r_pos = if *r > 0.0 { *r } else { 0.0 };
     //         self.strategy.insert(m, r_pos);
     //         normalizing_sum += r_pos;
@@ -258,13 +258,13 @@ impl NodeInfo {
         let mut avg_strategy: HashMap<Move, Floating> = HashMap::new();
         let mut normalizing_sum = 0.0;
         for m in MOVE_LIST {
-            normalizing_sum += self.strategy_sum.get(&m).unwrap_or_else(|| &0.0);
+            normalizing_sum += self.strategy_sum.get(&m).unwrap_or(&0.0);
         }
         for m in MOVE_LIST {
             avg_strategy.insert(
                 m,
                 if normalizing_sum > 0.0 {
-                    self.strategy_sum.get(&m).unwrap_or_else(|| &0.0) / normalizing_sum
+                    self.strategy_sum.get(&m).unwrap_or(&0.0) / normalizing_sum
                 } else {
                     1.0 / (MOVE_LIST.len() as Floating)
                 },
