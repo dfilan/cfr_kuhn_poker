@@ -85,7 +85,7 @@ mod history_tests {
 #[derive(Debug)]
 pub struct ChancyHistory {
     player_to_move: Player,
-    moves_and_counterfactual_reach_probs: Vec<(Floating, Floating, Move)>,
+    moves_and_counterfactual_reach_probs: Vec<((Floating, Floating), Move)>,
 }
 
 impl ChancyHistory {
@@ -96,7 +96,7 @@ impl ChancyHistory {
         let mut trunc_moves: Vec<Move> = self
             .moves_and_counterfactual_reach_probs
             .iter()
-            .map(|&(p0, p1, m)| m)
+            .map(|&((p0, p1), m)| m)
             .collect();
         let mut rest_moves = VecDeque::from(trunc_moves.split_off(n));
         let next_move = rest_moves
@@ -124,7 +124,7 @@ impl ChancyHistory {
             moves: self
                 .moves_and_counterfactual_reach_probs
                 .iter()
-                .map(|&(p0, p1, m)| m)
+                .map(|&((p0, p1), m)| m)
                 .collect(),
         }
     }
@@ -143,12 +143,12 @@ impl ChancyHistory {
         let length = self.len();
         let moves_etc = &self.moves_and_counterfactual_reach_probs;
         if length > 1 {
-            let terminal_pass = moves_etc[length - 1].2 == Move::Pass;
+            let terminal_pass = moves_etc[length - 1].1 == Move::Pass;
             let double_bet =
-                moves_etc[length - 1].2 == Move::Bet && moves_etc[length - 2].2 == Move::Bet;
+                moves_etc[length - 1].1 == Move::Bet && moves_etc[length - 2].1 == Move::Bet;
             let current_player_winning = winning_player(deck) == self.player_to_move;
             if terminal_pass {
-                if length == 2 && moves_etc[0].2 == Move::Pass {
+                if length == 2 && moves_etc[0].1 == Move::Pass {
                     return Some(if current_player_winning { 1.0 } else { -1.0 });
                 } else {
                     return Some(1.0);
@@ -167,6 +167,7 @@ impl ChancyHistory {
             // note that on the first move we don't have explicit counterfactual probabilities
             // of 1.0, sorry.
             // could probably implement a 'get_latest_p0_p1' method
+            // actually that's going to be useful when adding children
         }
     }
 }
