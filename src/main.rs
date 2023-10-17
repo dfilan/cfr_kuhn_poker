@@ -116,9 +116,12 @@ fn update_utils(
         player_utility *= -1.0;
         let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
         // add the discounted utility to the node value
-        node_info.utils.entry(m).and_modify(|u| {*u += reach_prob * player_utility});
+        node_info
+            .utils
+            .entry(m)
+            .and_modify(|u| *u += reach_prob * player_utility);
         // update the node value by the probability we take this action
-        let prob_next_move = node_map.get_strategy(m);
+        let prob_next_move = node_info.get_strategy(m);
         reach_prob *= prob_next_move;
         node_info.value += reach_prob * player_utility;
     }

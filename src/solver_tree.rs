@@ -205,7 +205,10 @@ fn new_move_to_float_map_probs() -> HashMap<Move, Floating> {
 impl NodeInfo {
     // TODO: move all this updating to when you accumulate the cumulative regret
     pub fn get_strategy(&self, m: Move) -> Floating {
-        self.strategy.get(&m).expect("All nodes that exist should have strategies");
+        *self
+            .strategy
+            .get(&m)
+            .expect("All nodes that exist should have strategies")
     }
     // pub fn get_strategy(&mut self, realization_weight: Floating) -> &HashMap<Move, Floating> {
     //     // compute strategies by regret matching
