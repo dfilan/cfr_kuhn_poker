@@ -9,7 +9,7 @@ use rand::Rng;
 use std::collections::HashMap;
 
 use crate::game::{Card, MOVE_LIST, NUM_CARDS};
-use crate::solver_tree::{util_if_terminal, ChancyHistory, Floating, InfoSet, NodeInfo};
+use crate::solver_tree::{ChancyHistory, Floating, InfoSet, NodeInfo};
 
 mod game;
 mod solver_tree;
@@ -61,16 +61,17 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
     // then go back up the tree updating the utilities of each node and action
     while !node_stack.is_empty() {
         let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
-        let info_set = chancy_hist.to_info_set(deck);
-        let option_util = util_if_terminal(&info_set, deck);
+        let option_util = chancy_hist.util_if_terminal(deck);
         match option_util {
             None => (),
             Some(u) => {
-                // update the counterfactual value of this history and everything before
-                // basically I'm going to store each node's overall utility and utility of
-                // each action
+                // update each node's value and utility of each action
                 update_utils(&chancy_hist, deck, node_map, u);
             }
+        }
+        for m in MOVE_LIST {
+            // push successor node onto stack
+            // gotta get prob of taking m from that info set
         }
     }
 
@@ -82,6 +83,12 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
         // get a node
         let chancy_hist = node_stack.pop().expect("Node stack should be non-empty");
         let info_set = chancy_hist.to_info_set(deck);
+
+        for m in MOVE_LIST {
+            // push successor node onto stack
+            // gotta get prob of taking m from that info set
+            // ah, here's your problem: got to do this before updating the strategies at this node
+        }
 
         // calculate the regret of each action
 
@@ -98,9 +105,23 @@ fn update_utils(
     chancy_hist: &ChancyHistory,
     deck: &[Card; NUM_CARDS],
     node_map: &mut HashMap<InfoSet, NodeInfo>,
-    u: Floating,
+    terminal_utility: Floating,
 ) {
-    ()
+    let mut player_utility: Floating = terminal_utility;
+    let mut reach_prob: Floating = 1.0;
+    // loop over non-terminal nodes, from the end to the start
+    for n in (0..chancy_hist.len() - 1).rev() {
+        let (info_set, m) = chancy_hist.truncate(n, deck);
+        // we've switched players, so utilty has changed sign
+        player_utility *= -1.0;
+        let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
+        // add the discounted utility to the node value
+        node_info.utils.entry(m).and_modify(|u| {*u += reach_prob * player_utility});
+        // update the node value by the probability we take this action
+        let prob_next_move = node_map.get_strategy(m);
+        reach_prob *= prob_next_move;
+        node_info.value += reach_prob * player_utility;
+    }
 }
 
 // fn cfr_recursive(

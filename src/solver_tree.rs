@@ -1,10 +1,11 @@
 // Types of histories and nodes etc used in the counterfactual regret minimization algorithm.
 // Includes relevant methods.
 
+use std::collections::{HashMap, VecDeque};
+
 use crate::game::{
     get_player_card, other_player, winning_player, Card, Move, Player, MOVE_LIST, NUM_CARDS,
 };
-use std::collections::HashMap;
 
 pub type Floating = f64;
 
@@ -88,6 +89,35 @@ pub struct ChancyHistory {
 }
 
 impl ChancyHistory {
+    pub fn truncate(&self, n: usize, deck: &[Card; NUM_CARDS]) -> (InfoSet, Move) {
+        if n >= self.len() {
+            panic!("Attempted to truncate a ChancyHistory to a limit no shorter than its length");
+        }
+        let mut trunc_moves: Vec<Move> = self
+            .moves_and_counterfactual_reach_probs
+            .iter()
+            .map(|&(p0, p1, m)| m)
+            .collect();
+        let mut rest_moves = VecDeque::from(trunc_moves.split_off(n));
+        let next_move = rest_moves
+            .pop_front()
+            .expect("We should truncate to a proper subset of the history");
+        let new_player = if n % 2 == 0 {
+            self.player_to_move
+        } else {
+            other_player(self.player_to_move)
+        };
+        let card = get_player_card(new_player, deck);
+        let info_set = InfoSet {
+            card: card,
+            history: History {
+                player_to_move: new_player,
+                moves: trunc_moves,
+            },
+        };
+        (info_set, next_move)
+    }
+
     fn determinize(&self) -> History {
         History {
             player_to_move: self.player_to_move,
@@ -103,6 +133,31 @@ impl ChancyHistory {
         let history = self.determinize();
         let card = get_player_card(self.player_to_move, deck);
         InfoSet { card, history }
+    }
+
+    pub fn len(&self) -> usize {
+        self.moves_and_counterfactual_reach_probs.len()
+    }
+
+    pub fn util_if_terminal(&self, deck: &[Card; NUM_CARDS]) -> Option<Floating> {
+        let length = self.len();
+        let moves_etc = &self.moves_and_counterfactual_reach_probs;
+        if length > 1 {
+            let terminal_pass = moves_etc[length - 1].2 == Move::Pass;
+            let double_bet =
+                moves_etc[length - 1].2 == Move::Bet && moves_etc[length - 2].2 == Move::Bet;
+            let current_player_winning = winning_player(deck) == self.player_to_move;
+            if terminal_pass {
+                if length == 2 && moves_etc[0].2 == Move::Pass {
+                    return Some(if current_player_winning { 1.0 } else { -1.0 });
+                } else {
+                    return Some(1.0);
+                }
+            } else if double_bet {
+                return Some(if current_player_winning { 2.0 } else { -2.0 });
+            }
+        }
+        None
     }
 
     pub fn new() -> Self {
@@ -122,65 +177,65 @@ pub struct InfoSet {
     history: History,
 }
 
-pub fn util_if_terminal(info_set: &InfoSet, deck: &[Card; NUM_CARDS]) -> Option<Floating> {
-    let hist = &info_set.history;
-    if hist.moves.len() > 1 {
-        let terminal_pass = hist.moves[hist.moves.len() - 1] == Move::Pass;
-        let double_bet = hist.moves[hist.moves.len() - 1] == Move::Bet
-            && hist.moves[hist.moves.len() - 2] == Move::Bet;
-        let current_player_winning = winning_player(deck) == hist.player_to_move;
-        if terminal_pass {
-            if hist.moves.len() == 0 && hist.moves[0] == Move::Pass {
-                return Some(if current_player_winning { 1.0 } else { -1.0 });
-            } else {
-                return Some(1.0);
-            }
-        } else if double_bet {
-            return Some(if current_player_winning { 2.0 } else { -2.0 });
-        }
-    }
-    None
-}
-
 pub struct NodeInfo {
-    value: Floating,
-    utils: HashMap<Move, Floating>,
+    pub value: Floating,
+    pub utils: HashMap<Move, Floating>,
     regret_sum: HashMap<Move, Floating>,
     strategy: HashMap<Move, Floating>,
     strategy_sum: HashMap<Move, Floating>,
 }
 
+fn new_move_to_float_map_zeros() -> HashMap<Move, Floating> {
+    let mut new_map = HashMap::new();
+    for m in MOVE_LIST {
+        new_map.insert(m, 0.0);
+    }
+    new_map
+}
+
+fn new_move_to_float_map_probs() -> HashMap<Move, Floating> {
+    let mut new_map = HashMap::new();
+    let num_moves = MOVE_LIST.len();
+    for m in MOVE_LIST {
+        new_map.insert(m, 1.0 / (num_moves as Floating));
+    }
+    new_map
+}
+
 impl NodeInfo {
     // TODO: move all this updating to when you accumulate the cumulative regret
-    pub fn get_strategy(&mut self, realization_weight: Floating) -> &HashMap<Move, Floating> {
-        // compute strategies by regret matching
-        let mut normalizing_sum = 0.0;
-        for m in MOVE_LIST {
-            let r = self.regret_sum.get(&m).unwrap_or_else(|| &0.0);
-            let r_pos = if *r > 0.0 { *r } else { 0.0 };
-            self.strategy.insert(m, r_pos);
-            normalizing_sum += r_pos;
-        }
-        for m in MOVE_LIST {
-            let strat_m = if normalizing_sum > 0.0 {
-                let s = self
-                    .strategy
-                    .get(&m)
-                    .expect("We should have supplied this value earlier in this function.");
-                s / normalizing_sum
-            } else {
-                1.0 / (MOVE_LIST.len() as Floating)
-            };
-            self.strategy.insert(m, strat_m);
-            let sum_update = realization_weight * strat_m;
-            self.strategy_sum
-                .entry(m)
-                .and_modify(|s| *s += sum_update)
-                .or_insert(sum_update);
-        }
-
-        &self.strategy
+    pub fn get_strategy(&self, m: Move) -> Floating {
+        self.strategy.get(&m).expect("All nodes that exist should have strategies");
     }
+    // pub fn get_strategy(&mut self, realization_weight: Floating) -> &HashMap<Move, Floating> {
+    //     // compute strategies by regret matching
+    //     let mut normalizing_sum = 0.0;
+    //     for m in MOVE_LIST {
+    //         let r = self.regret_sum.get(&m).unwrap_or_else(|| &0.0);
+    //         let r_pos = if *r > 0.0 { *r } else { 0.0 };
+    //         self.strategy.insert(m, r_pos);
+    //         normalizing_sum += r_pos;
+    //     }
+    //     for m in MOVE_LIST {
+    //         let strat_m = if normalizing_sum > 0.0 {
+    //             let s = self
+    //                 .strategy
+    //                 .get(&m)
+    //                 .expect("We should have supplied this value earlier in this function.");
+    //             s / normalizing_sum
+    //         } else {
+    //             1.0 / (MOVE_LIST.len() as Floating)
+    //         };
+    //         self.strategy.insert(m, strat_m);
+    //         let sum_update = realization_weight * strat_m;
+    //         self.strategy_sum
+    //             .entry(m)
+    //             .and_modify(|s| *s += sum_update)
+    //             .or_insert(sum_update);
+    //     }
+
+    //     &self.strategy
+    // }
 
     pub fn get_average_strategy(&self) -> HashMap<Move, Floating> {
         let mut avg_strategy: HashMap<Move, Floating> = HashMap::new();
@@ -204,10 +259,10 @@ impl NodeInfo {
     pub fn new() -> Self {
         Self {
             value: 0.0,
-            utils: HashMap::new(),
-            regret_sum: HashMap::new(),
-            strategy: HashMap::new(),
-            strategy_sum: HashMap::new(),
+            utils: new_move_to_float_map_zeros(),
+            regret_sum: new_move_to_float_map_zeros(),
+            strategy: new_move_to_float_map_probs(),
+            strategy_sum: new_move_to_float_map_zeros(),
         }
     }
 }
