@@ -107,7 +107,7 @@ impl ChancyHistory {
         let mut trunc_moves: Vec<Move> = self
             .moves_and_counterfactual_reach_probs
             .iter()
-            .map(|&((p0, p1), m)| m)
+            .map(|&(_, m)| m)
             .collect();
         let mut rest_moves = VecDeque::from(trunc_moves.split_off(n));
         let next_move = rest_moves
@@ -135,7 +135,7 @@ impl ChancyHistory {
             moves: self
                 .moves_and_counterfactual_reach_probs
                 .iter()
-                .map(|&((p0, p1), m)| m)
+                .map(|&(_, m)| m)
                 .collect(),
         }
     }
@@ -171,6 +171,32 @@ impl ChancyHistory {
         None
     }
 
+    pub fn extend(&self, m: Move, prob: Floating) -> Self {
+        let new_player = other_player(self.player_to_move);
+        let counterfac_probs = if self.len() == 0 {
+            assert!(
+                self.player_to_move == Player::Player0,
+                "Zero-length history with player 1 to move somehow got initialized"
+            );
+            (prob, 1.0)
+        } else {
+            let &(prob_0, prob_1) = &self
+                .moves_and_counterfactual_reach_probs
+                .last()
+                .expect("There should be at least one move in this branch of the if statement")
+                .0;
+            match self.player_to_move {
+                Player::Player0 => (prob_0 * prob, prob_1),
+                Player::Player1 => (prob_0, prob_1 * prob),
+            }
+        };
+        let mut new_moves_probs = self.moves_and_counterfactual_reach_probs.clone();
+        new_moves_probs.push((counterfac_probs, m));
+        Self {
+            player_to_move: new_player,
+            moves_and_counterfactual_reach_probs: new_moves_probs,
+        }
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]

@@ -70,16 +70,15 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
             }
             None => {
                 // our node is not terminal
+                // wrap this up in a function?
                 // so add child nodes to the node stack
                 let info_set = chancy_hist.to_info_set(deck);
                 let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
                 for m in MOVE_LIST {
                     // get prob of taking m from this info set
                     let prob_move = node_info.get_strategy(m);
-                    // multiply that by existing counterfactual probs as appropriate
-                    // then stick that plus m onto the end of chancy_hist.
-                    // (all the above should probably be a method of ChancyHistory)
-                    // then put that onto the stack
+                    let next_chancy_hist = chancy_hist.extend(m, prob_move);
+                    node_stack.push(next_chancy_hist);
                 }
             }
         }
