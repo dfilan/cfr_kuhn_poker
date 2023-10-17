@@ -181,7 +181,7 @@ impl ChancyHistory {
             );
             (prob, 1.0)
         } else {
-            let &(prob_0, prob_1) = &self.moves_and_counterfactual_reach_probs[length].0;
+            let &(prob_0, prob_1) = &self.moves_and_counterfactual_reach_probs[length - 1].0;
             match self.player_to_move {
                 Player::Player0 => (prob_0 * prob, prob_1),
                 Player::Player1 => (prob_0, prob_1 * prob),
