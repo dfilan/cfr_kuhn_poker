@@ -1,7 +1,9 @@
 // Types of histories and nodes etc used in the counterfactual regret minimization algorithm.
 // Includes relevant methods.
 
-use std::collections::{HashMap, VecDeque};
+// TODO write tests for ChancyHistory - do I truncate right? get the right info sets? Extend right?
+
+use std::collections::HashMap;
 
 use crate::game::{
     get_player_card, other_player, winning_player, Card, Move, Player, MOVE_LIST, NUM_CARDS,
@@ -109,10 +111,8 @@ impl ChancyHistory {
             .iter()
             .map(|&(_, m)| m)
             .collect();
-        let mut rest_moves = VecDeque::from(trunc_moves.split_off(n));
-        let next_move = rest_moves
-            .pop_front()
-            .expect("We should truncate to a proper subset of the history");
+        let rest_moves = trunc_moves.split_off(n);
+        let next_move = rest_moves[0];
         let new_player = if n % 2 == 0 {
             self.player_to_move
         } else {
@@ -173,18 +173,15 @@ impl ChancyHistory {
 
     pub fn extend(&self, m: Move, prob: Floating) -> Self {
         let new_player = other_player(self.player_to_move);
-        let counterfac_probs = if self.len() == 0 {
+        let length = self.len();
+        let counterfac_probs = if length == 0 {
             assert!(
                 self.player_to_move == Player::Player0,
                 "Zero-length history with player 1 to move somehow got initialized"
             );
             (prob, 1.0)
         } else {
-            let &(prob_0, prob_1) = &self
-                .moves_and_counterfactual_reach_probs
-                .last()
-                .expect("There should be at least one move in this branch of the if statement")
-                .0;
+            let &(prob_0, prob_1) = &self.moves_and_counterfactual_reach_probs[length].0;
             match self.player_to_move {
                 Player::Player0 => (prob_0 * prob, prob_1),
                 Player::Player1 => (prob_0, prob_1 * prob),
