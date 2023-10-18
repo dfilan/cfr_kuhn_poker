@@ -22,7 +22,7 @@ mod card_tests {
     fn card_ord() {
         assert!(Card::Ace > Card::Queen);
         assert!(Card::King < Card::Ace);
-        assert!(!(Card::Queen > Card::King));
+        assert!(Card::Queen <= Card::King);
     }
 }
 
