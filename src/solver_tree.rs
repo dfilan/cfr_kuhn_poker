@@ -17,72 +17,31 @@ struct History {
     moves: Vec<Move>,
 }
 
-impl History {
-    fn new() -> Self {
-        Self {
-            player_to_move: Player::Player0,
-            moves: Vec::new(),
-        }
-    }
+// #[cfg(test)]
+// mod history_tests {
+//     use crate::game::{Move, Player};
+//     use crate::solver_tree::History;
 
-    fn append(&mut self, p: Player, m: Move) {
-        if p != self.player_to_move {
-            panic!("Attempted to add to history, but it was the wrong player's turn");
-        } else {
-            self.player_to_move = other_player(p);
-            self.moves.push(m);
-        }
-    }
+//     #[test]
+//     fn player_append_valid() {
+//         let mut my_hist = History::new();
+//         my_hist.append(Player::Player0, Move::Pass);
+//         assert_eq!(
+//             my_hist,
+//             History {
+//                 player_to_move: Player::Player1,
+//                 moves: vec![Move::Pass]
+//             }
+//         );
+//     }
 
-    fn retract(&mut self) {
-        let p = self.player_to_move;
-        self.player_to_move = other_player(p);
-        self.moves.pop();
-    }
-
-    fn truncate(&mut self, n: usize) {
-        if n > self.moves.len() {
-            panic!("Attempted to truncate a history to a limit longer than its length.")
-        }
-        self.moves.truncate(n);
-        if n % 2 != 0 {
-            self.player_to_move = other_player(self.player_to_move);
-        }
-    }
-
-    fn get_info_set(&self, deck: &[Card; NUM_CARDS]) -> InfoSet {
-        let card = get_player_card(self.player_to_move, deck);
-        InfoSet {
-            card,
-            history: self.clone(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod history_tests {
-    use crate::{History, Move, Player};
-
-    #[test]
-    fn player_append_valid() {
-        let mut my_hist = History::new();
-        my_hist.append(Player::Player0, Move::Pass);
-        assert_eq!(
-            my_hist,
-            History {
-                player_to_move: Player::Player1,
-                moves: vec![Move::Pass]
-            }
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn player_append_invalid() {
-        let mut my_hist = History::new();
-        my_hist.append(Player::Player1, Move::Bet);
-    }
-}
+//     #[test]
+//     #[should_panic]
+//     fn player_append_invalid() {
+//         let mut my_hist = History::new();
+//         my_hist.append(Player::Player1, Move::Bet);
+//     }
+// }
 
 #[derive(Debug)]
 pub struct ChancyHistory {
@@ -113,7 +72,7 @@ impl ChancyHistory {
             .collect();
         let rest_moves = trunc_moves.split_off(n);
         let next_move = rest_moves[0];
-        let new_player = if n % 2 == 0 {
+        let new_player = if (self.len() - n) % 2 == 0 {
             self.player_to_move
         } else {
             other_player(self.player_to_move)
@@ -194,6 +153,29 @@ impl ChancyHistory {
             moves_and_counterfactual_reach_probs: new_moves_probs,
         }
     }
+
+    pub fn get_reach_prob(&self) -> Floating {
+        let length = self.len();
+        if length == 0 {
+            1.0
+        } else {
+            let &(prob_0, prob_1) = &self.moves_and_counterfactual_reach_probs[length - 1].0;
+            prob_0 * prob_1
+        }
+    }
+
+    pub fn get_counterfactual_reach_prob(&self) -> Floating {
+        let length = self.len();
+        if length == 0 {
+            1.0
+        } else {
+            let &(prob_0, prob_1) = &self.moves_and_counterfactual_reach_probs[length - 1].0;
+            match self.player_to_move {
+                Player::Player0 => prob_1,
+                Player::Player1 => prob_0,
+            }
+        }
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
@@ -224,35 +206,37 @@ impl NodeInfo {
             .get(&m)
             .expect("All nodes that exist should have strategies")
     }
-    // pub fn get_strategy(&mut self, realization_weight: Floating) -> &HashMap<Move, Floating> {
-    //     // compute strategies by regret matching
-    //     let mut normalizing_sum = 0.0;
-    //     for m in MOVE_LIST {
-    //         let r = self.regret_sum.get(&m).unwrap_or(&0.0);
-    //         let r_pos = if *r > 0.0 { *r } else { 0.0 };
-    //         self.strategy.insert(m, r_pos);
-    //         normalizing_sum += r_pos;
-    //     }
-    //     for m in MOVE_LIST {
-    //         let strat_m = if normalizing_sum > 0.0 {
-    //             let s = self
-    //                 .strategy
-    //                 .get(&m)
-    //                 .expect("We should have supplied this value earlier in this function.");
-    //             s / normalizing_sum
-    //         } else {
-    //             1.0 / (MOVE_LIST.len() as Floating)
-    //         };
-    //         self.strategy.insert(m, strat_m);
-    //         let sum_update = realization_weight * strat_m;
-    //         self.strategy_sum
-    //             .entry(m)
-    //             .and_modify(|s| *s += sum_update)
-    //             .or_insert(sum_update);
-    //     }
 
-    //     &self.strategy
-    // }
+    pub fn update_regret(&mut self, m: Move, r: Floating) {
+        *self
+            .regret_sum
+            .get_mut(&m)
+            .expect("We should only call update_regret on nodes that have regret sums") += r;
+    }
+
+    pub fn update_strategy(&mut self, realization_weight: Floating) {
+        // compute strategies by regret matching
+        let mut normalizing_sum = 0.0;
+        for m in MOVE_LIST {
+            let r = self.regret_sum.get(&m).unwrap_or(&0.0);
+            let r_pos = if *r > 0.0 { *r } else { 0.0 };
+            self.strategy.insert(m, r_pos);
+            normalizing_sum += r_pos;
+        }
+        for m in MOVE_LIST {
+            let strat_m = if normalizing_sum > 0.0 {
+                self.strategy.get(&m).unwrap() / normalizing_sum
+            } else {
+                1.0 / (MOVE_LIST.len() as Floating)
+            };
+            self.strategy.insert(m, strat_m);
+            let sum_update = realization_weight * strat_m;
+            self.strategy_sum
+                .entry(m)
+                .and_modify(|s| *s += sum_update)
+                .or_insert(sum_update);
+        }
+    }
 
     pub fn get_average_strategy(&self) -> HashMap<Move, Floating> {
         let mut avg_strategy: HashMap<Move, Floating> = HashMap::new();
