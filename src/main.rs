@@ -1,4 +1,4 @@
-// Code to solve Rock Paper Scissors using Counterfactual Regret Minimization
+// Code to solve Kuhn Poker using Counterfactual Regret Minimization
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
 // TODO document some stuff
@@ -25,13 +25,6 @@ fn main() {
         shuffle_deck(&mut deck, &mut rng);
         util += cfr(&deck, &mut node_map);
     }
-
-    // for debugging purposes
-    // let base_set = InfoSet {
-    //     card: Card::Ace,
-    //     history: History::new(),
-    // };
-    // node_map.insert(base_set, NodeInfo::new());
 
     println!("Average game value is {}", util / (num_iters as Floating));
     for (info_set, node_info) in node_map.into_iter() {
