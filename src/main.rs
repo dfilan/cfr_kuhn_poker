@@ -127,7 +127,7 @@ fn append_children_to_stack(
 fn update_utils(
     chancy_hist: &ChancyHistory,
     deck: &[Card; NUM_CARDS],
-    node_map: &mut HashMap<InfoSet, NodeInfo>,
+    node_map: &HashMap<InfoSet, NodeInfo>,
     utils_map: &mut HashMap<InfoSet, NodeUtils>,
     terminal_utility: Floating,
 ) {
