@@ -1,11 +1,16 @@
 // Code to solve Kuhn Poker using Counterfactual Regret Minimization
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
-// TODO document some stuff
-// TODO: think about whether we can prune subtrees???
+// stuff I actually want to do, in order:
+// fix how I access early nodes tons - probably implement FSICFR?
+// then do a post-flop solver (write tests for that)
+// then do simple optimizations - stop iterating based on regret, weight early iterations less
+// then maybe do abstract info sets
+// then do a full poker solver (def with abstract info sets, might have to do it monte carlo)
 
 use rand::Rng;
 use std::collections::HashMap;
+use std::time::SystemTime;
 
 use crate::game::{Card, MOVE_LIST, NUM_CARDS};
 use crate::solver_tree::{ChancyHistory, Floating, InfoSet, NodeInfo, NodeUtils};
@@ -14,12 +19,14 @@ mod game;
 mod solver_tree;
 
 fn main() {
-    let num_iters = 1_000;
+    let num_iters = 100_000;
     let mut rng = rand::thread_rng();
     let mut deck: [Card; NUM_CARDS] = [Card::Ace, Card::King, Card::Queen];
 
     let mut util = 0.0;
     let mut node_map: HashMap<InfoSet, NodeInfo> = HashMap::new();
+
+    let start = SystemTime::now();
 
     for _ in 0..num_iters {
         shuffle_deck(&mut deck, &mut rng);
@@ -34,6 +41,17 @@ fn main() {
             info_set, avg_strategy
         );
     }
+
+    match start.elapsed() {
+        Ok(elapsed) => {
+            println!("Time elapsed: {} ms", elapsed.as_millis());
+        }
+        Err(e) => {
+            println!("Timing error: {:?}", e);
+        }
+    }
+
+    println!("Number of iterations: {}", num_iters);
 }
 
 fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
