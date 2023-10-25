@@ -78,12 +78,9 @@ fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> F
 
         if let Some(u) = chancy_hist.util_if_terminal(deck) {
             // chancy_hist is terminal
-            // It doesn't actualy make sense for me to have move utils here
+            // No need to set move utils here
             // but we do need to say what the value of the node is for backwards induction.
             let node_utils = utils_map.get_mut(&info_set).unwrap();
-            for m in MOVE_LIST {
-                node_utils.move_utils.insert(m, 0.0);
-            }
             node_utils.value = u;
             // No need to calculate counterfactual regrets or update strategies for a terminal node.
         } else {
