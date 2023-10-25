@@ -2,7 +2,6 @@
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
 // stuff I actually want to do, in order:
-// check if I'm matching the Nash for Kuhn Poker
 // then do a post-flop solver (write tests for that)
 // then do simple optimizations - stop iterating based on regret, weight early iterations less
 // then maybe do abstract info sets
