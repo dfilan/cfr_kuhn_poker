@@ -2,7 +2,7 @@
 // Following "An Introduction to Counterfactual Regret Minimization" by Neller and Lanctot (2013)
 
 // stuff I actually want to do, in order:
-// fix how I access early nodes tons - probably implement FSICFR?
+// check if I'm matching the Nash for Kuhn Poker
 // then do a post-flop solver (write tests for that)
 // then do simple optimizations - stop iterating based on regret, weight early iterations less
 // then maybe do abstract info sets
@@ -35,11 +35,13 @@ fn main() {
 
     println!("Average game value is {}", util / (num_iters as Floating));
     for (info_set, node_info) in node_map.into_iter() {
-        let avg_strategy = node_info.get_average_strategy();
-        println!(
-            "At info_set {:?}, avg strategy is {:?}",
-            info_set, avg_strategy
-        );
+        if !info_set.is_terminal() {
+            let avg_strategy = node_info.get_average_strategy();
+            println!(
+                "At info_set {:?}, avg strategy is {:?}",
+                info_set, avg_strategy
+            );
+        }
     }
 
     match start.elapsed() {
@@ -62,60 +64,59 @@ fn shuffle_deck(deck: &mut [Card; NUM_CARDS], rng: &mut rand::rngs::ThreadRng) {
 }
 
 fn cfr(deck: &[Card; NUM_CARDS], node_map: &mut HashMap<InfoSet, NodeInfo>) -> Floating {
-    let mut node_stack: Vec<ChancyHistory> = vec![ChancyHistory::new()];
     let mut utils_map: HashMap<InfoSet, NodeUtils> = HashMap::new();
 
-    // search the game tree depth-first until finding terminal nodes
-    // then go back up the tree updating the utilities of each node and action
-    while let Some(chancy_hist) = node_stack.pop() {
-        let option_util = chancy_hist.util_if_terminal(deck);
-        match option_util {
-            Some(utility) => {
-                // our node is terminal
-                // update each node's value and utility of each action
-                update_utils(&chancy_hist, deck, node_map, &mut utils_map, utility);
-            }
-            None => {
-                // our node is not terminal
-                // add child nodes to the node stack
-                let info_set = chancy_hist.to_info_set(deck);
-                let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
-                append_children_to_stack(&chancy_hist, node_info, &mut node_stack);
-            }
-        }
-    }
+    // Get a topological ordering of the game tree
+    let top_order = get_topological_ordering(deck, node_map);
 
-    // search the game tree again to calculate counterfactual regrets, now that utilities are
-    // calculated
-    node_stack.push(ChancyHistory::new());
-    while let Some(chancy_hist) = node_stack.pop() {
-        if chancy_hist.util_if_terminal(deck).is_none() {
-            // node isn't terminal
-            let info_set = chancy_hist.to_info_set(deck);
-            let node_info = node_map
-                .get_mut(&info_set)
-                .expect("Info entries were added to all nodes in the last traversal");
+    // Iterate thru nodes in reverse topological order, so we can propagate values up the tree.
+    for chancy_hist in top_order.into_iter().rev() {
+        let info_set = chancy_hist.to_info_set(deck);
+        let node_info = node_map
+            .get_mut(&info_set)
+            .expect("Entries should have been added to node map during topological sort");
+        utils_map.insert(chancy_hist.to_info_set(deck), NodeUtils::new());
+
+        if let Some(u) = chancy_hist.util_if_terminal(deck) {
+            // chancy_hist is terminal
+            // It doesn't actualy make sense for me to have move utils here
+            // but we do need to say what the value of the node is for backwards induction.
+            let node_utils = utils_map.get_mut(&info_set).unwrap();
+            for m in MOVE_LIST {
+                node_utils.move_utils.insert(m, 0.0);
+            }
+            node_utils.value = u;
+            // No need to calculate counterfactual regrets or update strategies for a terminal node.
+        } else {
+            // First, set move utilities by the values of the successor nodes
+
+            for m in MOVE_LIST {
+                let prob_move = node_info.get_strategy(m);
+                let next_chancy_hist = chancy_hist.extend(m, prob_move);
+                let next_info_set = next_chancy_hist.to_info_set(deck);
+                let next_node_value = utils_map.get(&next_info_set).expect("Utils should have been set earlier in the loop, because we're iterating thru the reverse of a topological sort").value;
+                let node_utils = utils_map
+                    .get_mut(&info_set)
+                    .expect("We should have created this entry at the start of this loop");
+                node_utils.move_utils.insert(m, (-1.0) * next_node_value);
+                node_utils.value += prob_move * (-1.0) * next_node_value;
+            }
+
+            // Next, calculate counterfactual regrets and update the regret sums.
             let node_utils = utils_map
-                .get(&info_set)
-                .expect("Utilities were added to all nodes in the last traversal");
-
-            // append children to stack before we start updating move probabilities
-            append_children_to_stack(&chancy_hist, node_info, &mut node_stack);
-
-            let node_value = node_utils.value;
-            // calculate the regret of each action, and update the cumulative counterfactual regret
+                .get_mut(&info_set)
+                .expect("We should have created this entry at the start of this loop");
             for m in MOVE_LIST {
                 let util_m = node_utils
                     .move_utils
                     .get(&m)
-                    .expect("We should have calculated utils for all moves");
-                let regret_m = util_m - node_value;
+                    .expect("We should have just calculated utils for all moves");
+                let regret_m = util_m - node_utils.value;
                 let counterfact_prob = chancy_hist.get_counterfactual_reach_prob();
-                // update node info with the counterfactual regret
                 node_info.update_regret(m, counterfact_prob * regret_m);
             }
 
-            // then update the strategies and strategy sums
+            // Finally, update strategies.
             let reach_prob = chancy_hist.get_reach_prob();
             node_info.update_strategy(reach_prob);
         }
@@ -142,34 +143,21 @@ fn append_children_to_stack(
     }
 }
 
-fn update_utils(
-    chancy_hist: &ChancyHistory,
+fn get_topological_ordering(
     deck: &[Card; NUM_CARDS],
-    node_map: &HashMap<InfoSet, NodeInfo>,
-    utils_map: &mut HashMap<InfoSet, NodeUtils>,
-    terminal_utility: Floating,
-) {
-    let mut player_utility: Floating = terminal_utility;
-    let mut reach_prob: Floating = 1.0;
-    // iterate over non-terminal prefixes of this history, from the end to the start
-    for n in (0..chancy_hist.len()).rev() {
-        let (info_set, m) = chancy_hist.truncate(n, deck);
-        // we've switched players, so utility has changed sign
-        player_utility *= -1.0;
-        // getting node info and node utils
-        let node_info = node_map.get(&info_set).expect(
-            "We should have reached non-terminal nodes earlier in DFS and made node infos for them."
-        );
-        let node_utils = utils_map.entry(info_set).or_insert(NodeUtils::new());
-        // add the discounted utility to the node value
-        node_utils
-            .move_utils
-            .entry(m)
-            .and_modify(|u| *u += reach_prob * player_utility);
-        // update the node value by its discounted utility,
-        // updating the discount by the probability we take the action in question
-        let prob_next_move = node_info.get_strategy(m);
-        reach_prob *= prob_next_move;
-        node_utils.value += reach_prob * player_utility;
+    node_map: &mut HashMap<InfoSet, NodeInfo>,
+) -> Vec<ChancyHistory> {
+    let mut unseen_nodes = vec![ChancyHistory::new()];
+    let mut ordered_nodes: Vec<ChancyHistory> = Vec::new();
+
+    while let Some(chancy_hist) = unseen_nodes.pop() {
+        let info_set = chancy_hist.to_info_set(deck);
+        let node_info = node_map.entry(info_set).or_insert(NodeInfo::new());
+        if !chancy_hist.is_terminal() {
+            append_children_to_stack(&chancy_hist, node_info, &mut unseen_nodes);
+        }
+        ordered_nodes.push(chancy_hist);
     }
+
+    ordered_nodes
 }

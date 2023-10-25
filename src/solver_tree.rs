@@ -17,36 +17,76 @@ struct History {
     moves: Vec<Move>,
 }
 
-// #[cfg(test)]
-// mod history_tests {
-//     use crate::game::{Move, Player};
-//     use crate::solver_tree::History;
+impl History {
+    fn len(&self) -> usize {
+        self.moves.len()
+    }
 
-//     #[test]
-//     fn player_append_valid() {
-//         let mut my_hist = History::new();
-//         my_hist.append(Player::Player0, Move::Pass);
-//         assert_eq!(
-//             my_hist,
-//             History {
-//                 player_to_move: Player::Player1,
-//                 moves: vec![Move::Pass]
-//             }
-//         );
-//     }
-
-//     #[test]
-//     #[should_panic]
-//     fn player_append_invalid() {
-//         let mut my_hist = History::new();
-//         my_hist.append(Player::Player1, Move::Bet);
-//     }
-// }
+    fn termination_type(&self) -> HistState {
+        let length = self.len();
+        let moves = &self.moves;
+        if length > 1 {
+            let terminal_pass = moves[length - 1] == Move::Pass;
+            let double_bet = moves[length - 1] == Move::Bet && moves[length - 2] == Move::Bet;
+            if terminal_pass {
+                if length == 2 && moves[0] == Move::Pass {
+                    return HistState::DoublePass;
+                } else {
+                    return HistState::BetFold;
+                }
+            } else if double_bet {
+                return HistState::Showdown;
+            }
+        }
+        HistState::InProgress
+    }
+}
 
 #[derive(Debug)]
 pub struct ChancyHistory {
     player_to_move: Player,
     moves_and_counterfactual_reach_probs: Vec<((Floating, Floating), Move)>,
+}
+
+#[derive(Debug)]
+enum HistState {
+    InProgress,
+    DoublePass,
+    BetFold,
+    Showdown,
+}
+
+#[cfg(test)]
+mod history_tests {
+    use crate::game::{Move, Player};
+    use crate::solver_tree::ChancyHistory;
+
+    // things i could test
+    // when you truncate a history, you get what i think you should get
+    // when you extend a history, you get what i think you should get
+    // when you get reach probs and counterfactual reach probs, you get what i think you should get
+    // similarly determinize
+    // you have the right utils if terminal sometimes
+
+    // #[test]
+    // fn player_append_valid() {
+    //     let mut my_hist = History::new();
+    //     my_hist.append(Player::Player0, Move::Pass);
+    //     assert_eq!(
+    //         my_hist,
+    //         History {
+    //             player_to_move: Player::Player1,
+    //             moves: vec![Move::Pass]
+    //         }
+    //     );
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn player_append_invalid() {
+    //     let mut my_hist = History::new();
+    //     my_hist.append(Player::Player1, Move::Bet);
+    // }
 }
 
 impl ChancyHistory {
@@ -59,33 +99,6 @@ impl ChancyHistory {
             // could probably implement a 'get_latest_p0_p1' method
             // actually that's going to be useful when adding children
         }
-    }
-
-    pub fn truncate(&self, n: usize, deck: &[Card; NUM_CARDS]) -> (InfoSet, Move) {
-        if n >= self.len() {
-            panic!("Attempted to truncate a ChancyHistory to a limit no shorter than its length");
-        }
-        let mut trunc_moves: Vec<Move> = self
-            .moves_and_counterfactual_reach_probs
-            .iter()
-            .map(|&(_, m)| m)
-            .collect();
-        let rest_moves = trunc_moves.split_off(n);
-        let next_move = rest_moves[0];
-        let new_player = if (self.len() - n) % 2 == 0 {
-            self.player_to_move
-        } else {
-            other_player(self.player_to_move)
-        };
-        let card = get_player_card(new_player, deck);
-        let info_set = InfoSet {
-            card,
-            history: History {
-                player_to_move: new_player,
-                moves: trunc_moves,
-            },
-        };
-        (info_set, next_move)
     }
 
     fn determinize(&self) -> History {
@@ -109,25 +122,22 @@ impl ChancyHistory {
         self.moves_and_counterfactual_reach_probs.len()
     }
 
+    pub fn is_terminal(&self) -> bool {
+        !matches!(self.determinize().termination_type(), HistState::InProgress)
+        // match self.termination_type() {
+        //     HistState::InProgress => false,
+        //     _ => true,
+        // }
+    }
+
     pub fn util_if_terminal(&self, deck: &[Card; NUM_CARDS]) -> Option<Floating> {
-        let length = self.len();
-        let moves_etc = &self.moves_and_counterfactual_reach_probs;
-        if length > 1 {
-            let terminal_pass = moves_etc[length - 1].1 == Move::Pass;
-            let double_bet =
-                moves_etc[length - 1].1 == Move::Bet && moves_etc[length - 2].1 == Move::Bet;
-            let current_player_winning = winning_player(deck) == self.player_to_move;
-            if terminal_pass {
-                if length == 2 && moves_etc[0].1 == Move::Pass {
-                    return Some(if current_player_winning { 1.0 } else { -1.0 });
-                } else {
-                    return Some(1.0);
-                }
-            } else if double_bet {
-                return Some(if current_player_winning { 2.0 } else { -2.0 });
-            }
+        let current_player_winning = winning_player(deck) == self.player_to_move;
+        match self.determinize().termination_type() {
+            HistState::InProgress => None,
+            HistState::DoublePass => Some(if current_player_winning { 1.0 } else { -1.0 }),
+            HistState::BetFold => Some(1.0),
+            HistState::Showdown => Some(if current_player_winning { 2.0 } else { -2.0 }),
         }
-        None
     }
 
     pub fn extend(&self, m: Move, prob: Floating) -> Self {
@@ -182,6 +192,14 @@ impl ChancyHistory {
 pub struct InfoSet {
     card: Card,
     history: History,
+}
+
+impl InfoSet {
+    pub fn is_terminal(&self) -> bool {
+        // make termination type a function of history
+        // propagate those changes
+        !matches!(self.history.termination_type(), HistState::InProgress)
+    }
 }
 
 pub struct NodeInfo {
