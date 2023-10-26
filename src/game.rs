@@ -2,11 +2,13 @@
 
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Card {
+    Ten,
+    Jack,
     Queen,
     King,
     Ace,
 }
-pub const NUM_CARDS: usize = 3;
+pub const NUM_CARDS: usize = 5;
 
 #[cfg(test)]
 mod card_tests {
@@ -28,10 +30,12 @@ mod card_tests {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Move {
-    Pass,
+    Check,
     Bet,
+    Call,
+    Raise,
+    Fold,
 }
-pub const MOVE_LIST: [Move; 2] = [Move::Pass, Move::Bet];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Player {
