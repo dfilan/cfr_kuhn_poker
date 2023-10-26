@@ -1,8 +1,6 @@
 // Types of histories and nodes etc used in the counterfactual regret minimization algorithm.
 // Includes relevant methods.
 
-// TODO write tests for ChancyHistory - do I truncate right? get the right info sets? Extend right?
-
 use std::collections::HashMap;
 
 use crate::game::{
@@ -56,39 +54,6 @@ enum HistState {
     Showdown,
 }
 
-#[cfg(test)]
-mod history_tests {
-    use crate::game::{Move, Player};
-    use crate::solver_tree::ChancyHistory;
-
-    // things i could test
-    // when you truncate a history, you get what i think you should get
-    // when you extend a history, you get what i think you should get
-    // when you get reach probs and counterfactual reach probs, you get what i think you should get
-    // similarly determinize
-    // you have the right utils if terminal sometimes
-
-    // #[test]
-    // fn player_append_valid() {
-    //     let mut my_hist = History::new();
-    //     my_hist.append(Player::Player0, Move::Pass);
-    //     assert_eq!(
-    //         my_hist,
-    //         History {
-    //             player_to_move: Player::Player1,
-    //             moves: vec![Move::Pass]
-    //         }
-    //     );
-    // }
-
-    // #[test]
-    // #[should_panic]
-    // fn player_append_invalid() {
-    //     let mut my_hist = History::new();
-    //     my_hist.append(Player::Player1, Move::Bet);
-    // }
-}
-
 impl ChancyHistory {
     pub fn new() -> Self {
         Self {
@@ -96,8 +61,6 @@ impl ChancyHistory {
             moves_and_counterfactual_reach_probs: Vec::new(),
             // note that on the first move we don't have explicit counterfactual probabilities
             // of 1.0, sorry.
-            // could probably implement a 'get_latest_p0_p1' method
-            // actually that's going to be useful when adding children
         }
     }
 
@@ -124,10 +87,6 @@ impl ChancyHistory {
 
     pub fn is_terminal(&self) -> bool {
         !matches!(self.determinize().termination_type(), HistState::InProgress)
-        // match self.termination_type() {
-        //     HistState::InProgress => false,
-        //     _ => true,
-        // }
     }
 
     pub fn util_if_terminal(&self, deck: &[Card; NUM_CARDS]) -> Option<Floating> {
@@ -217,7 +176,6 @@ impl NodeInfo {
         }
     }
 
-    // TODO: move all this updating to when you accumulate the cumulative regret
     pub fn get_strategy(&self, m: Move) -> Floating {
         *self
             .strategy
